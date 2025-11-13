@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ta">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plans & Notes </title>
+  <style>
+    :root{--bg:#f7fafc;--card:#fff;--muted:#666;--accent:#065f46}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,"Noto Sans",sans-serif;margin:0;padding:16px;background:var(--bg);color:#111}
+    .container{max-width:880px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{font-size:20px;margin:0}
+    form{display:grid;grid-template-columns:1fr 160px;gap:8px;margin-top:12px;align-items:start}
+    .full{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+    input,textarea,select,button{padding:8px;border-radius:8px;border:1px solid #ddd;font-size:14px}
+    textarea{min-height:72px;resize:vertical}
+    button{cursor:pointer}
+    .controls{display:flex;gap:8px;align-items:center;margin-top:8px}
+    .list{margin-top:18px}
+    .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:12px;border-left:6px solid transparent}
+    .meta{display:flex;flex-direction:column;gap:6px;flex:1}
+    .toprow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .small{font-size:12px;color:var(--muted)}
+    .actions{display:flex;gap:8px;align-items:center}
+    .pill{background:#eef2ff;padding:4px 8px;border-radius:999px;font-size:12px;color:#1f2937}
+    .done{opacity:.6;text-decoration:line-through}
+    .priority-low{border-left-color:green;}
+    .priority-med{border-left-color:orange;}
+    .priority-high{border-left-color:red;}
+    .btn-ghost{background:transparent;border:1px solid #ddd;padding:6px 8px;border-radius:6px}
+    .empty{color:#888;margin-top:12px}
+    @media (max-width:720px){
+      form{grid-template-columns:1fr}
+      .controls{flex-direction:column;align-items:stretch}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Plan / Note Manager</h1>
+      </div>
+      <div class="small">Tip: Use "Set Today" for date</div>
+    </header>
+
+    <form id="addForm" autocomplete="off">
+      <input id="title" placeholder="Short title (required)" required />
+      <select id="priority" title="Priority">
+        <option value="low">Low priority</option>
+        <option value="medium" selected>Medium priority</option>
+        <option value="high">High priority</option>
+      </select>
+
+      <textarea id="description" placeholder="Description / plan / notes (optional)" class="full"></textarea>
+
+      <input id="date" type="date" />
+      <input id="link" placeholder="Google Meet link or any URL (optional)" />
+
+      <select id="type" style="width:160px">
+        <option value="Plan">Plan</option>
+        <option value="Achievement">Achievement</option>
+        <option value="Reminder">Reminder</option>
+        <option value="Other">Other</option>
+      </select>
+
+      <div class="full" style="justify-content:flex-end">
+        <button type="button" id="setToday" class="btn-ghost">Set Today</button>
+        <button id="addBtn" type="submit">Add</button>
+      </div>
+    </form>
+
+    <div class="controls">
+      <label><input type="checkbox" id="filterToday" /> Show only today's items</label>
+      <label style="margin-left:8px"><input type="checkbox" id="showDone" /> Show done items</label>
+      <div style="flex:1"></div>
+      <button id="clearAll" class="btn-ghost">Clear all</button>
+      <button id="exportBtn" class="btn-ghost">Export JSON</button>
+      <button id="importBtn" class="btn-ghost">Import JSON</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none" />
+    </div>
+
+    <div class="list" id="eventsList"></div>
+    <div class="empty" id="emptyMessage">No items yet. Add a plan or note!</div>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:10px 14px;border-radius:8px"></div>
+
+  <script>
+    const STORAGE_KEY = 'plans_notes_v2';
+    const eventsListEl = document.getElementById('eventsList');
+    const emptyEl = document.getElementById('emptyMessage');
+    const toastEl = document.getElementById('toast');
+    const setTodayBtn = document.getElementById('setToday');
+    const filterTodayChk = document.getElementById('filterToday');
+    const clearAllBtn = document.getElementById('clearAll');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const importFile = document.getElementById('importFile');
+    const showDoneChk = document.getElementById('showDone');
+
+    function showToast(text='Saved', ms=1200){
+      toastEl.textContent = text;
+      toastEl.style.display = 'block';
+      setTimeout(()=> { toastEl.style.display = 'none'; }, ms);
+    }
+
+    function todayISODate(){
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function loadItems(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return [];
+        return JSON.parse(raw);
+      }catch(e){
+        console.error('load err', e);
+        return [];
+      }
+    }
+
+    function saveItems(arr){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+
+    // render UI
+    function render(){
+      const items = loadItems();
+      eventsListEl.innerHTML = '';
+      const filterToday = filterTodayChk.checked;
+      const showDone = showDoneChk.checked;
+      let filtered = items;
+      if(!showDone) filtered = filtered.filter(it => !it.done);
+      if(filterToday) filtered = filtered.filter(it => it.date === todayISODate());
+
+      if(filtered.length === 0){
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      // newest first
+      filtered.slice().reverse().forEach(it => {
+        const card = document.createElement('div');
+        card.className = 'card ' + (it.priority === 'high' ? 'priority-high' : (it.priority === 'medium' ? 'priority-med' : 'priority-low'));
+        if(it.done) card.classList.add('done');
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+
+        const top = document.createElement('div');
+        top.className = 'toprow';
+
+        const left = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = it.title;
+        left.appendChild(title);
+
+        const smallMeta = document.createElement('div');
+        smallMeta.className = 'small';
+        smallMeta.textContent = `${it.type}${it.date ? ' • ' + it.date : ''} • ${new Date(it.createdAt).toLocaleString()}`;
+        left.appendChild(smallMeta);
+
+        top.appendChild(left);
+
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.gap = '8px';
+        right.style.alignItems = 'center';
+
+        const meet = document.createElement('a');
+        if(it.link){
+          meet.href = it.link;
+          meet.target = '_blank';
+          meet.rel = 'noopener';
+          meet.textContent = 'Open link';
+          meet.className = 'pill';
+          right.appendChild(meet);
+        }
+
+        const doneBtn = document.createElement('button');
+        doneBtn.textContent = it.done ? 'Undo' : 'Done';
+        doneBtn.className = 'btn-ghost';
+        doneBtn.onclick = () => {
+          toggleDone(it.id);
+        };
+        right.appendChild(doneBtn);
+
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit';
+        editBtn.className = 'btn-ghost';
+        editBtn.onclick = () => { startEdit(it.id); };
+        right.appendChild(editBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = 'Delete';
+        delBtn.className = 'btn-ghost';
+        delBtn.onclick = () => { deleteItem(it.id); };
+        right.appendChild(delBtn);
+
+        top.appendChild(right);
+
+        meta.appendChild(top);
+
+        if(it.description){
+          const desc = document.createElement('div');
+          desc.className = 'small';
+          desc.style.whiteSpace = 'pre-wrap';
+          desc.style.marginTop = '8px';
+          desc.textContent = it.description;
+          meta.appendChild(desc);
+        }
+
+        card.appendChild(meta);
+        eventsListEl.appendChild(card);
+      });
+    }
+
+    // add / update handling
+    let editId = null;
+    document.getElementById('addForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      const title = document.getElementById('title').value.trim();
+      const priority = document.getElementById('priority').value;
+      const date = document.getElementById('date').value || null;
+      const link = document.getElementById('link').value.trim() || null;
+      const type = document.getElementById('type').value;
+      const description = document.getElementById('description').value.trim() || null;
+
+      if(!title) return alert('Title required');
+
+      const items = loadItems();
+
+      if(editId){
+        // update existing
+        const idx = items.findIndex(x => x.id === editId);
+        if(idx >= 0){
+          items[idx] = {...items[idx], title, priority, date, link, type, description};
+          saveItems(items);
+          editId = null;
+          document.getElementById('addBtn').textContent = 'Add';
+          showToast('Updated');
+        }
+      } else {
+        const newItem = {
+          id: Date.now().toString(),
+          title, priority, date, link, type, description,
+          done: false,
+          createdAt: new Date().toISOString()
+        };
+        items.push(newItem);
+        saveItems(items);
+        showToast('Added');
+      }
+
+      // clear form
+      document.getElementById('title').value = '';
+      document.getElementById('priority').value = 'medium';
+      document.getElementById('date').value = '';
+      document.getElementById('link').value = '';
+      document.getElementById('type').value = 'Plan';
+      document.getElementById('description').value = '';
+      render();
+    });
+
+    function toggleDone(id){
+      const items = loadItems();
+      const idx = items.findIndex(x => x.id === id);
+      if(idx >= 0){
+        items[idx].done = !items[idx].done;
+        saveItems(items);
+        render();
+        showToast(items[idx].done ? 'Marked done' : 'Marked undone');
+      }
+    }
+
+    function deleteItem(id){
+      if(!confirm('Delete this item?')) return;
+      const items = loadItems().filter(x => x.id !== id);
+      saveItems(items);
+      render();
+      showToast('Deleted');
+    }
+
+    // start edit: populate form
+    function startEdit(id){
+      const items = loadItems();
+      const it = items.find(x => x.id === id);
+      if(!it) return;
+      editId = id;
+      document.getElementById('title').value = it.title;
+      document.getElementById('priority').value = it.priority || 'medium';
+      document.getElementById('date').value = it.date || '';
+      document.getElementById('link').value = it.link || '';
+      document.getElementById('type').value = it.type || 'Plan';
+      document.getElementById('description').value = it.description || '';
+      document.getElementById('addBtn').textContent = 'Update';
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    // clear all
+    clearAllBtn.addEventListener('click', () => {
+      if(!confirm('Clear ALL items? This cannot be undone.')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      render();
+      showToast('All cleared');
+    });
+
+    // set today
+    setTodayBtn.addEventListener('click', () => {
+      document.getElementById('date').value = todayISODate();
+      showToast('Date set to today');
+    });
+
+    // filters
+    filterTodayChk.addEventListener('change', render);
+    showDoneChk.addEventListener('change', render);
+
+    // export JSON
+    exportBtn.addEventListener('click', () => {
+      const data = loadItems();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'plans_notes_export.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Exported');
+    });
+
+    // import JSON (file)
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        try{
+          const parsed = JSON.parse(evt.target.result);
+          if(!Array.isArray(parsed)) throw new Error('Invalid format');
+          // basic validation of items (id & title)
+          const valid = parsed.every(it => it.id && it.title);
+          if(!valid) throw new Error('Invalid items');
+          saveItems(parsed);
+          render();
+          showToast('Imported');
+        }catch(err){
+          alert('Import failed: ' + err.message);
+        }
+      };
+      reader.readAsText(f);
+      importFile.value = '';
+    });
+
+    // initialise
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!--
+Simple frontend-only login page (index.html)
+How to use:
+1. Save this file as `index.html`.
+2. Open it in your browser (double-click or right-click -> Open with -> Chrome/Edge/Firefox).
+3. Enter the hard-coded credentials below to "login".
+
+Default credentials (change these inside the script):
+username: user@example.com
+password: Pass1234
+
+SECURITY: This checks credentials purely in the browser. It's NOT secure for real apps because anyone can view the source and see the password. Use only for demo/prototyping or learning.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Frontend-only Login</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#0ea5a4;--muted:#94a3b8}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Arial;min-height:100vh;margin:0;display:grid;place-items:center;background:linear-gradient(180deg,#071024 0%, #0b1226 100%);color:#e6eef8}
+    .card{width:360px;background:linear-gradient(180deg,rgba(255,255,255,0.02), rgba(0,0,0,0.03));padding:28px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6);}
+    h1{margin:0 0 8px;font-size:20px}
+    p.desc{margin:0 0 18px;color:var(--muted);font-size:13px}
+
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="text"], input[type="password"]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit;margin-bottom:12px}
+    .row{display:flex;gap:8px;align-items:center}
+    .btn{width:100%;padding:10px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#0891b2);color:#042027;font-weight:600;cursor:pointer}
+    .hint{font-size:12px;color:#fca5a5;margin-bottom:8px;display:none}
+    .success{display:none;padding:14px;border-radius:8px;background:linear-gradient(90deg,#0f5132,#164e2b);color:#c7f9dd;text-align:center}
+    .small{font-size:12px;color:var(--muted)}
+    .actions{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+    .toggle-pass{background:none;border:0;color:var(--muted);cursor:pointer;font-size:12px}
+    footer{margin-top:12px;text-align:center;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="card" role="main">
+    <h1>Login</h1>
+    <p class="desc">.</p>
+
+    <div id="formArea">
+      <div>
+        <label for="username">Login ID (email or username)</label>
+        <input id="username" type="text" autocomplete="username" placeholder="user@example.com">
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <div class="row">
+          <input id="password" type="password" autocomplete="current-password" placeholder="Password">
+          <button id="toggle" class="toggle-pass" aria-label="show password">Show</button>
+        </div>
+      </div>
+
+      <div class="hint" id="hint">Incorrect username or password</div>
+      <button id="loginBtn" class="btn">Login</button>
+
+      
+
+    <div id="successArea" class="success">
+      <h3 id="welcome">Welcome!</h3>
+      <p id="welcomeSub">You are logged in (Horizon).</p>
+    </div>
+
+  </div>
+
+  <script>
+    // ====== CONFIG: change these for demo ======
+    const DEMO_USERNAME = 'thehorizon@gmail.com'
+    const DEMO_PASSWORD = 'horizon'
+    // ==========================================
+
+    const elUser = document.getElementById('username')
+    const elPass = document.getElementById('password')
+    const btn = document.getElementById('loginBtn')
+    const hint = document.getElementById('hint')
+    const success = document.getElementById('successArea')
+    const formArea = document.getElementById('formArea')
+    const welcome = document.getElementById('welcome')
+    const welcomeSub = document.getElementById('welcomeSub')
+    const toggle = document.getElementById('toggle')
+
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault()
+      if (elPass.type === 'password') { elPass.type = 'text'; toggle.textContent = 'Hide' }
+      else { elPass.type = 'password'; toggle.textContent = 'Show' }
+    })
+
+    function showHint(text) {
+      hint.textContent = text
+      hint.style.display = 'block'
+    }
+
+    function hideHint() { hint.style.display = 'none' }
+
+    btn.addEventListener('click', (e) => {
+      hideHint()
+      const u = elUser.value.trim()
+      const p = elPass.value
+
+      if (!u || !p) { showHint('Please enter both username and password'); return }
+
+      if (u === DEMO_USERNAME && p === DEMO_PASSWORD) {
+        window.location.href = 'next.html'
+      } else {
+        showHint('Incorrect username or password')
+      }
+    })
+
+    // If user previously logged in (demo), show success immediately
+    window.addEventListener('load', () => {
+      if (localStorage.getItem('demo_logged_in') === '1') {
+        const u = localStorage.getItem('demo_user') || DEMO_USERNAME
+        formArea.style.display = 'none'
+        success.style.display = 'block'
+        welcome.textContent = `Welcome back, ${u.split('@')[0] || u}!`
+        welcomeSub.textContent = 'You were remembered by localStorage (demo).'
+      }
+    })
+  </script>
+</body>
+</html>
